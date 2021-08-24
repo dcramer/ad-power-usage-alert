@@ -7,7 +7,7 @@ power_usage_washer:
   dependencies: sentry
   entity_id: sensor.washer_power
   delay: 3
-  input_boolean: input_boolean.washer
+  namespace: washer
   telegram:
     - !secret telegram_group_id_home
   done_message: "The wash machine has finished"

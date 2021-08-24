@@ -79,7 +79,7 @@ class AlertApp(hass.Hass):
         self.delay = self.args.get("delay") or 0
 
         # used to store the state of whether this alert is active
-        self.input_boolean = self.args.get("input_boolean")
+        self.namespace = self.args.get("namespace")
         # self.notify_list = self.args.get("notify") or []
         # TODO: add sonos list?
         # TODO: add script list?
@@ -108,21 +108,21 @@ class AlertApp(hass.Hass):
     # TODO: when we up to appd 4.x
     # @ad.app_lock
     def _load_previous_state(self):
-        if self.input_boolean:
+        if self.namespace:
             now = float(datetime.utcnow().strftime("%s"))
-            state = self.get_state(self.input_boolean)
+            state = self.get_state(self.entity_id, namespace=self.namespace)
             self.first_active_at = (
-                self.get_state(self.input_boolean, attribute="first_active_at") or now
+                self.get_state(self.entity_id, attribute="first_active_at", namespace=self.namespace) or now,
             )
             self.last_active_at = (
-                self.get_state(self.input_boolean, attribute="last_active_at") or now
+                self.get_state(self.entity_id, attribute="last_active_at", namespace=self.namespace) or now
             )
             self.repeat_idx = (
-                self.get_state(self.input_boolean, attribute="repeat_idx") or 0
+                self.get_state(self.entity_id, attribute="repeat_idx", namespace=self.namespace) or 0
             )
-            self.alert_id = self.get_state(self.input_boolean, attribute="alert_id")
+            self.alert_id = self.get_state(self.entity_id, attribute="alert_id", namespace=self.namespace)
             self.last_value = (
-                self.get_state(self.input_boolean, attribute="last_value") or None
+                self.get_state(self.entity_id, attribute="last_value", namespace=self.namespace) or None
             )
             self.active = state == "on"
         else:
@@ -165,9 +165,9 @@ class AlertApp(hass.Hass):
             # self.did_alert = (
             #     not self.skip_first or self.last_active_at > self.first_active_at
             # )
-            if self.input_boolean is not None:
+            if self.namespace:
                 self.set_state(
-                    self.input_boolean, state="on", attributes=self._get_attributes(),
+                    self.entity_id, state="on", attributes=self._get_attributes(), namespace=self.namespace
                 )
             self.log("{} is: {} - active [repeat]".format(self.entity_id, new,))
             self.did_alert = True
@@ -186,9 +186,9 @@ class AlertApp(hass.Hass):
             self.first_active_at = self.last_active_at = now
             self.repeat_idx = 0
             self.log("{} is: {} - active".format(self.entity_id, new,))
-            if self.input_boolean is not None:
+            if self.namespace:
                 self.set_state(
-                    self.input_boolean, state="on", attributes=self._get_attributes(),
+                    self.entity_id, state="on", attributes=self._get_attributes(), namespace=self.namespace
                 )
             if not self.skip_first:
                 self.did_alert = True
@@ -225,9 +225,9 @@ class AlertApp(hass.Hass):
 
     def _on_deactivate(self, kwargs):
         self.active = False
-        if self.input_boolean is not None:
+        if self.namespace:
             self.set_state(
-                self.input_boolean, state="off", attributes=self._get_attributes()
+                self.entity_id, state="off", attributes=self._get_attributes(), namespace=self.namespace
             )
         if self.did_alert:
             self.on_deactivate(kwargs["old"], kwargs["new"])
