@@ -36,8 +36,8 @@ class AlertApp(hass.Hass):
     def initialize(self):
         self._timer_handles = []
         self._listen_state_handles = []
-        self._activation_delay_handle_handle = None
-        self._deactivation_delay_handle_handle = None
+        self._activation_delay_handle = None
+        self._deactivation_delay_handle = None
         self._tick_handle = None
 
         # is the alert active?
