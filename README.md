@@ -25,5 +25,5 @@ espresso_machine:
   namespace: hive
   telegram:
     - !secret telegram_group_id_home
-  done_message: "The espresso machine is ready"
+  message: "The espresso machine is ready"
 ```
