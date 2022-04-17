@@ -16,6 +16,7 @@ class PowerUsageAlert(AlertApp):
             self.done_message = self.args.get("done_message")
         except KeyError:
             self.done_message = None
+
         super().initialize()
 
     def should_trigger(self, old, new):

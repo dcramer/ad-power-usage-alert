@@ -36,7 +36,8 @@ class AlertApp(hass.Hass):
     def initialize(self):
         self._timer_handles = []
         self._listen_state_handles = []
-        self._delay_handle = None
+        self._activation_delay_handle_handle = None
+        self._deactivation_delay_handle_handle = None
         self._tick_handle = None
 
         # is the alert active?
@@ -75,8 +76,11 @@ class AlertApp(hass.Hass):
         # the entity we are monitoring for state changes
         self.entity_id = self.args.get("entity_id")
 
-        # delay to activate
-        self.delay = self.args.get("delay") or 0
+        # delay to activation trigger (in case activated or needs warmup)
+        self.activation_delay = self.args.get("activation_delay") or 0
+
+        # delay to deactivation trigger (in case reactivated)
+        self.deactivation_delay = self.args.get("deactivation_delay") or 0
 
         # used to store the state of whether this alert is active
         self.namespace = self.args.get("namespace")
@@ -180,40 +184,61 @@ class AlertApp(hass.Hass):
     def _test_state(self, old, new):
         now = float(datetime.utcnow().strftime("%s"))
 
+        # inactive -> active
         if not self.active and self.should_trigger(old=old, new=new):
             self.active = True
             self.alert_id = uuid1().hex
             self.first_active_at = self.last_active_at = now
             self.repeat_idx = 0
-            self.log("{} is: {} - active".format(self.entity_id, new,))
             if self.namespace:
                 self.set_state(
                     self.entity_id, state="on", attributes=self._get_attributes(), namespace=self.namespace
                 )
-            if not self.skip_first:
-                self.did_alert = True
-                self.on_activate(old, new)
+
             self._cancel_timers()
+
+            if not self.skip_first:
+                self.log("{} is: {} - active [waiting {} to notify]".format(self.entity_id, new, self.activation_delay))
+                self._activation_delay_handle = self.run_in(
+                    self._on_activate, self.activation_delay, old=old, new=new
+                )
+            else:
+                self.log("{} is: {} - active [first alert skipped]".format(self.entity_id, new))
+
             self._tick_handle = self.run_every(self._tick, datetime.now(), 60)
+
+        # has gone from active -> inactive
         elif (
             self.active
-            and self._delay_handle is None
+            and self._deactivation_delay_handle is None
             and not self.should_trigger(old=old, new=new)
         ):
             self.log(
                 "{} is: {} - inactive [waiting {} to notify]".format(
-                    self.entity_id, new, self.delay
+                    self.entity_id, new, self.deactivation_delay
                 )
             )
             self._cancel_timers()
-            self._delay_handle = self.run_in(
-                self._on_deactivate, self.delay, old=old, new=new
+            self._deactivation_delay_handle = self.run_in(
+                self._on_deactivate, self.deactivation_delay, old=old, new=new
             )
 
-        # Power usage goes up before delay
+        # power usage goes down before activation_delay
+        elif (
+            not self.active
+            and self._activation_delay_handle is not None
+            and self.should_trigger(old=old, new=new)
+        ):
+            self.log(
+                "{} is: {} - deactivated [cancelling timer]".format(self.entity_id, new)
+            )
+            self._cancel_timers()
+            self._tick_handle = self.run_every(self._tick, datetime.now(), 60)
+
+        # power usage goes up before deactivation_delay
         elif (
             self.active
-            and self._delay_handle is not None
+            and self._deactivation_delay_handle is not None
             and self.should_trigger(old=old, new=new)
         ):
             self.log(
@@ -221,7 +246,12 @@ class AlertApp(hass.Hass):
             )
             self._cancel_timers()
             self._tick_handle = self.run_every(self._tick, datetime.now(), 60)
+
         self.last_value = new
+    
+    def _on_activate(self, kwargs):
+        self.did_alert = True
+        self.on_activate(kwargs["old"], kwargs["new"])
 
     def _on_deactivate(self, kwargs):
         self.active = False
@@ -239,9 +269,13 @@ class AlertApp(hass.Hass):
             self.cancel_timer(self._tick_handle)
         self._tick_handle = None
 
-        if self._delay_handle:
-            self.cancel_timer(self._delay_handle)
-        self._delay_handle = None
+        if self._activation_delay_handle:
+            self.cancel_timer(self._activation_delay_handle)
+        self._activation_delay_handle = None
+
+        if self._deactivation_delay_handle:
+            self.cancel_timer(self._deactivation_delay_handle)
+        self._deactivation_delay_handle = None
 
     def terminate(self):
         self._cancel_timers()
